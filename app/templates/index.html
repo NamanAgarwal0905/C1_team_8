@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leaf Disease Analyzer</title>
+<style>
+  :root{--bg:#f4f8f1;--card:#fff;--ink:#1b2b21;--muted:#5b6b60;--green:#2f6b3a;--dark:#1f3d2b;--light:#eaf2e3;--accent:#c8553d;--line:#d6e2d0}
+  @media (prefers-color-scheme:dark){:root{--bg:#121a15;--card:#1b261f;--ink:#e8f1e6;--muted:#9db3a2;--green:#7fc08a;--dark:#cfe3c4;--light:#223229;--line:#2f4236}}
+  *{box-sizing:border-box} body{margin:0;font-family:Calibri,"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#1f3d2b;color:#fff;padding:22px 20px} header h1{margin:0;font-family:Cambria,Georgia,serif;font-size:1.7rem}
+  header p{margin:4px 0 0;color:#cfe3c4}
+  main{max-width:1050px;margin:0 auto;padding:20px;display:grid;gap:20px;grid-template-columns:1fr 1fr}
+  @media (max-width:820px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  h2{margin:0 0 12px;font-family:Cambria,Georgia,serif;font-size:1.2rem;color:var(--dark)}
+  #drop{border:2px dashed var(--green);border-radius:12px;min-height:240px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);cursor:pointer;background:var(--light);overflow:hidden}
+  #drop.over{background:var(--card)} #drop img{max-width:100%;max-height:320px;display:block}
+  .row{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0}
+  label.opt{display:flex;align-items:center;gap:6px;font-size:.95rem} label.opt.off{color:var(--muted)}
+  button{background:var(--green);color:#fff;border:0;border-radius:10px;padding:11px 20px;font-size:1rem;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  #err{color:var(--accent);margin-top:10px;white-space:pre-wrap}
+  .big{font-family:Cambria,Georgia,serif;font-size:1.5rem;font-weight:700;color:var(--dark)}
+  .muted{color:var(--muted);font-size:.9rem}
+  .bar{height:10px;border-radius:6px;background:var(--light);overflow:hidden;margin:4px 0 10px} .bar>i{display:block;height:100%;background:var(--green)}
+  .gauge{height:18px;border-radius:9px;background:var(--light);overflow:hidden;margin:8px 0} .gauge>i{display:block;height:100%}
+  .pill{display:inline-block;padding:4px 12px;border-radius:999px;color:#fff;font-weight:600;font-size:.9rem}
+  .model{border-top:1px solid var(--line);padding-top:12px;margin-top:12px} .model:first-of-type{border:0;margin:0;padding:0}
+  #overlay{max-width:100%;border-radius:10px;margin-top:10px}
+  footer{max-width:1050px;margin:0 auto;padding:6px 20px 30px;color:var(--muted);font-size:.85rem}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Leaf Disease Analyzer</h1>
+  <p>Apple &amp; corn leaves: disease classification, affected area and severity stage</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. Upload a leaf photo</h2>
+    <div id="drop" tabindex="0"><span id="dropText">Drag &amp; drop an image here, or click to browse<br><small>JPG / PNG, one leaf, plain background works best</small></span></div>
+    <input id="file" type="file" accept="image/*" class="hidden">
+    <div class="row">
+      {% for key, label in labels.items() %}
+      <label class="opt {{ '' if models[key] else 'off' }}"><input type="radio" name="model" value="{{ key }}" {{ 'checked' if key=='cnn' else '' }}> {{ label }}{{ '' if models[key] else ' (not trained yet)' }}</label>
+      {% endfor %}
+      <label class="opt"><input type="radio" name="model" value="both"> Compare both</label>
+    </div>
+    <button id="go" disabled>Analyze leaf</button>
+    <div id="err"></div>
+  </section>
+  <section class="card" id="out">
+    <h2>2. Result</h2>
+    <p class="muted" id="placeholder">Results appear here after you analyze an image.</p>
+    <div id="results"></div>
+    <div id="sev" class="hidden">
+      <div class="model hidden" id="sevMsg"><div class="muted">Affected leaf area</div><div class="big" id="sevMsgText"></div></div>
+      <div class="model" id="sevData"><div class="muted">Affected leaf area</div>
+        <div class="big" id="pct"></div>
+        <div class="gauge"><i id="gfill"></i></div>
+        <span class="pill" id="stage"></span>
+        <div class="muted" id="px" style="margin-top:8px"></div>
+        <img id="overlay" alt="Leaf outline (green) and affected area (red)">
+        <div class="muted">Green line = leaf outline, red = detected diseased area.</div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>Section C1 &middot; Team 8 &mdash; Naman Agarwal, Naman Katiyar, Nishant Mohan, Nitya Binoy Vettical (MNNIT Allahabad). Results are a decision aid, not a substitute for an agronomist.</footer>
+<script>
+const $=id=>document.getElementById(id);
+const drop=$('drop'), file=$('file'), go=$('go'); let current=null;
+function setFile(f){ if(!f||!f.type.startsWith('image/')) return; current=f;
+  const img=new Image(); img.src=URL.createObjectURL(f); drop.innerHTML=''; drop.appendChild(img); go.disabled=false; $('err').textContent=''; }
+drop.onclick=()=>file.click(); drop.onkeydown=e=>{if(e.key==='Enter')file.click()};
+file.onchange=()=>setFile(file.files[0]);
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+go.onclick=async()=>{
+  const fd=new FormData(); fd.append('image',current); fd.append('model',document.querySelector('input[name=model]:checked').value);
+  go.disabled=true; go.textContent='Analyzing...'; $('err').textContent='';
+  try{
+    const r=await fetch('/predict',{method:'POST',body:fd}); const d=await r.json();
+    if(!r.ok){ $('err').textContent=d.error||'Something went wrong.'; return; }
+    $('placeholder').classList.add('hidden');
+    $('results').innerHTML=d.results.map(m=>`<div class="model"><div class="muted">${esc(m.model)}</div>
+      <div class="big">${esc(m.label)}</div><div class="muted">Confidence ${m.confidence.toFixed(1)}%${m.healthy?' &mdash; leaf looks healthy':''}</div>
+      ${m.top3.map(t=>`<div style="font-size:.9rem">${esc(t.label)} <span class="muted">${t.p.toFixed(1)}%</span></div><div class="bar"><i style="width:${t.p}%"></i></div>`).join('')}</div>`).join('');
+    const s=d.severity; $('sev').classList.remove('hidden');
+    const msg=s.healthy||s.error; $('sevMsg').classList.toggle('hidden',!msg); $('sevData').classList.toggle('hidden',!!msg);
+    if(msg){ $('sevMsgText').textContent=s.healthy?'Healthy - no analysis needed':s.error; }
+    else { $('pct').textContent=s.percent.toFixed(2)+'%'; const g=$('gfill'); g.style.width=Math.min(100,s.percent)+'%'; g.style.background=s.color;
+      const st=$('stage'); st.textContent=s.stage; st.style.background=s.color;
+      $('px').textContent=`${s.disease_px.toLocaleString()} diseased px of ${s.leaf_px.toLocaleString()} leaf px`; $('overlay').src=s.overlay; }
+  }catch(e){ $('err').textContent='Could not reach the server: '+e; }
+  finally{ go.disabled=false; go.textContent='Analyze leaf'; }
+};
+</script>
+</body>
+</html>

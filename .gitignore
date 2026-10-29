@@ -1,0 +1,12 @@
+# virtual environments / caches
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+# large, re-creatable data (see data/README.md)
+data/raw/
+data/subset/
+data/augmented/
+data/features/
+data/dataset_location.txt
